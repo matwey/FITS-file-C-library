@@ -85,7 +85,7 @@ class ifits {
 					return header_data_[lower_key];
 				}
 				else {
-					return NULL;
+					return NULL; // вовзращаю нуль, тк опциональный метод
 				}
 			}
 			catch (const std::exception& e) {
@@ -97,7 +97,7 @@ class ifits {
 		template<class F>
 		auto apply(F f) const {
 			return f(*this); // это не то, да? насколько я поняла apply нужен для того, 
-							// чтобы применять какие-то пользовательские функции к HDU
+					// чтобы применять какие-то пользовательские функции к HDU
 		}
 
 		/*
