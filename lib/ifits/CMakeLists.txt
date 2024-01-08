@@ -1,14 +1,12 @@
-set(LIB_IFITS_INCLUDE_ROOT                      ${LIB_IFITS_ROOT}/include)
+set(LIB_IFITS_HEADER_FILES ${IFITS_INCLUDE_DIR}/ifits.h
+                           ${IFITS_INCLUDE_DIR}/details/search.hpp)
 
-set(LIB_IFITS_DETAILS_ROOT                      ${LIB_IFITS_INCLUDE_ROOT}/details)
+add_library(ifits ${LIB_IFITS_HEADER_FILES})
 
-set(LIB_IFITS_INCLUDE_DIRECTORIES               ${LIB_IFITS_INCLUDE_ROOT})
+target_precompile_headers(ifits PRIVATE ${IFITS_INCLUDE_DIR}/pch.hpp)
 
-set(LIB_IFITS_HEADER_FILES                      ${LIB_IFITS_INCLUDE_ROOT}/hdu.hpp
-                                                ${LIB_IFITS_INCLUDE_ROOT}/ifits.hpp
-                                                ${LIB_IFITS_INCLUDE_ROOT}/pch.hpp
-                                                ${LIB_IFITS_DETAILS_ROOT}/search.hpp)
+find_package(Boost REQUIRED COMPONENTS asio)
 
-add_library(ifits.impl SHARED                   ${LIB_IFITS_HEADER_FILES})  
+include_directories(${Boost_INCLUDE_DIRS})
 
-target_include_directories(ifits.impl PRIVATE   ${LIB_IFITS_INCLUDE_DIRECTORIES})
+target_link_libraries(ifits ${Boost_LIBRARIES})
