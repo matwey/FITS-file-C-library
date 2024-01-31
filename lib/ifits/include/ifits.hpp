@@ -7,7 +7,6 @@
 #pragma once
 
 #include "pch.hpp"
-#include "hdu.hpp"
 #include "details/search.hpp"
 
 class ifits
@@ -20,78 +19,34 @@ public:
     explicit ifits(const boost::asio::io_context &io_context, const std::filesystem::path &filename)
         : file_(io_context, filename, boost::asio::random_access_file::read_only)
     {
-        std::ifstream file(filename, std::ios::binary);
-        std::string line;
-
-        while (std::getline(file, line) && line.find("END") == std::string::npos)
-        {
-            std::string key = line.substr(0, 8);
-            std::string value = line.substr(8, 30);
-
-            headers_.emplace(key, value);
-        }
-
+        char buffer[81];
         std::uint64_t next_hdu_offset = 0;
+
+        while (file_.read_some_at(next_hdu_offset, boost::asio::buffer(buffer, 80)) == 80)
+        {
+            buffer[80] = '\0';
+
+            std::string key = std::string(buffer, 8);
+            std::string value = std::string(buffer + 8, 30);
+            headers_.emplace(key, value);
+
+            next_hdu_offset += 80;
+        }
 
         while (file_.size() < next_hdu_offset)
         {
-            hdus_.push_back(extract_next_HDU(next_hdu_offset));
-            next_hdu_offset += hdus_.back().calculate_next_HDU_offset();
+            auto &new_hdu = hdus_.push_back(extract_next_HDU(next_hdu_offset));
+            next_hdu_offset += new_hdu.calculate_next_HDU_offset();
         }
     }
 
-private:
-    hdu extract_next_HDU(std::uint64_t offset)
-    {
-        header_container_t headers;
-        char data[kSizeHeaderBlock];
-        for (;; offset += kSizeHeaderBlock)
-        {
-            std::size_t n = from_file.read_some_at(offset, boost::asio::buffer(data), error);
-            if (error)
-            {
-                throw std::runtime_error("Error reading file");
-            }
-            if (n < kSizeHeaderBlock)
-            {
-                throw std::runtime_error("Invalid file format");
-            }
-
-            if (headers.back().type == END)
-            {
-                break;
-            }
-        }
-        return hdu{headers};
-    }
-
-public:
     ifits(const ifits &) = delete;
     ifits(ifits &&) = delete;
 
     ifits &operator=(const ifits &) = delete;
     ifits &operator=(ifits &) = delete;
 
-    std::list<hdu>::const_iterator cbegin() const
-    {
-        return hdus_.cbegin();
-    }
-
-    std::list<hdu>::const_iterator begin() const
-    {
-        return hdus_.begin();
-    }
-
-    std::list<hdu>::const_iterator cend() const
-    {
-        return hdus_.cend();
-    }
-
-    std::list<hdu>::const_iterator end() const
-    {
-        return hdus_.end();
-    }
-
+public:
     class hdu
     {
     public:
@@ -180,7 +135,14 @@ public:
                 throw std::out_of_range("Not found");
             }
 
-            return *it;
+            std::istringstream iss(it->second);
+            T value;
+            if (!(iss >> value))
+            {
+                throw std::runtime_error("Failed to convert value: " + std::string(e.what()));
+            }
+
+            return value;
         }
 
         template <class T>
@@ -189,45 +151,115 @@ public:
             auto it = headers_.find(key);
             if (it != headers_.end())
             {
+                // Возвращает std::optional<T>, а не значение типа T, поэтому не преобразуем в T
                 return it->second;
             }
             return std::nullopt;
         }
 
         /* паттерн visitor */
-        template <class F>
-        auto apply(F f) const
+        template <typename Functor>
+        auto apply(Functor f)
         {
-            return f(*this);
+            if (get_BITPIX() == 8)
+            {
+                return f(image_hdu<std::uint8_t>(this));
+            }
+            else if (get_BITPIX() == 16)
+            {
+                return f(image_hdu<std::int16_t>(this));
+            }
+            else if (get_BITPIX() == 32)
+            {
+                return f(image_hdu<std::int32_t>(this));
+            }
+            else if (get_BITPIX() == 64)
+            {
+                return f(image_hdu<std::int64_t>(this));
+            }
+            else
+            {
+                throw std::runtime_error("Unsupported BITPIX value");
+            }
         }
 
     private:
         header_container_t headers_;
+        hdu extract_next_HDU(std::uint64_t offset)
+        {
+            header_container_t headers;
+            char data[kSizeHeaderBlock];
+            for (;; offset += kSizeHeaderBlock)
+            {
+                std::size_t n = from_file.read_at(offset, boost::asio::buffer(data, kSizeHeaderBlock), error);
+                if (error)
+                {
+                    throw std::runtime_error("Error reading file");
+                }
+                if (n < kSizeHeaderBlock)
+                {
+                    throw std::runtime_error("Invalid file format");
+                }
+
+                if (headers.back().type == END)
+                {
+                    break;
+                }
+            }
+            return hdu{headers};
+        }
     };
+
+public:
+    std::list<hdu>::const_iterator cbegin() const
+    {
+        return hdus_.cbegin();
+    }
+
+    std::list<hdu>::const_iterator begin() const
+    {
+        return hdus_.begin();
+    }
+
+    std::list<hdu>::const_iterator cend() const
+    {
+        return hdus_.cend();
+    }
+
+    std::list<hdu>::const_iterator end() const
+    {
+        return hdus_.end();
+    }
 
     template <class T>
     class image_hdu
     {
-        auto async_read(T *buffer);
-    };
+    public:
+        image_hdu(ifits &parent_ifits) : parent_ifits_(parent_ifits) {}
 
-    template <class T>
-    auto image_hdu<T>::async_read(T *buffer)
-    {
-        boost::asio::mutable_buffer buf(buffer, sizeof(T));
+        template <class T>
+        auto async_read(T *buffer, std::size_t x_coord,
+                        std::size_t y_coord,
+                        std::size_t z_coord,
+                        std::function<void(std::size_t)> callback)
+        {
+            boost::asio::mutable_buffer buf(buffer, sizeof(T));
 
-        return boost::asio::async_read(file_, buf, boost::asio::transfer_exactly(sizeof(T)),
-                                       [](const boost::system::error_code &error, std::size_t bytes_transferred) -> std::size_t
-                                       {
-                                           if (error)
+            return boost::asio::async_read(parent_ifits_.file_, buf, boost::asio::transfer_exactly(sizeof(T)),
+                                           [callback](const boost::system::error_code &error, std::size_t bytes_transferred)
                                            {
-                                               throw std::runtime_error("Error reading file: " + error.message());
-                                           }
-                                           return bytes_transferred;
-                                       });
-    }
+                                               if (error)
+                                               {
+                                                   throw std::runtime_error("Error reading file: " + error.message());
+                                               }
+                                               callback(bytes_transferred);
+                                           });
+        }
+    };
 
 private:
     boost::asio::random_access_file file_;
     std::list<hdu> hdus_;
+
+    ifits &parent_ifits_;
 };
