@@ -27,7 +27,6 @@ add_library(lib_fits INTERFACE ${LIB_IFITS_HEADER_FILES})
 
 target_link_libraries(lib_fits ${Boost_LIBRARIES})
 
-
 add_subdirectory(ifits)
 add_subdirectory(ofits)
-#add_subdirectory(test)
+add_subdirectory(test)

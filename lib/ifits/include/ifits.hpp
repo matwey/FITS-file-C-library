@@ -9,6 +9,12 @@
 #include "pch.hpp"
 #include "details/search.hpp"
 
+
+#if !defined(BOOST_ASIO_HAS_FILE)
+#error "BOOST_ASIO_HAS_FILE not defined"
+#endif
+
+
 class ifits
 {
 public:
@@ -16,7 +22,7 @@ public:
 
     ifits() = default;
 
-    explicit ifits(const boost::asio::io_context &io_context, const std::filesystem::path &filename)
+    explicit ifits(boost::asio::io_context &io_context, const std::filesystem::path &filename)
         : file_(io_context, filename, boost::asio::random_access_file::read_only)
     {
         char buffer[81];
@@ -163,19 +169,19 @@ public:
         {
             if (get_BITPIX() == 8)
             {
-                return f(image_hdu<std::uint8_t>(this));
+                return f(image_hdu<std::uint8_t>(*this));
             }
             else if (get_BITPIX() == 16)
             {
-                return f(image_hdu<std::int16_t>(this));
+                return f(image_hdu<std::int16_t>(*this));
             }
             else if (get_BITPIX() == 32)
             {
-                return f(image_hdu<std::int32_t>(this));
+                return f(image_hdu<std::int32_t>(*this));
             }
             else if (get_BITPIX() == 64)
             {
-                return f(image_hdu<std::int64_t>(this));
+                return f(image_hdu<std::int64_t>(*this));
             }
             else
             {
@@ -235,9 +241,8 @@ public:
     class image_hdu
     {
     public:
-        image_hdu(ifits &parent_ifits) : parent_ifits_(parent_ifits) {}
+        image_hdu(ifits& parent_ifits) : parent_ifits_(parent_ifits) {}
 
-        template <class T>
         auto async_read(T *buffer, std::size_t x_coord,
                         std::size_t y_coord,
                         std::size_t z_coord,
@@ -255,11 +260,12 @@ public:
                                                callback(bytes_transferred);
                                            });
         }
+
+    private:
+        ifits& parent_ifits_;
     };
 
 private:
     boost::asio::random_access_file file_;
     std::list<hdu> hdus_;
-
-    ifits &parent_ifits_;
 };
