@@ -18,16 +18,14 @@ set(LIB_FITS_HEADER_FILES ${IFITS_INCLUDE_DIR}/ifits.hpp
                            ${OFITS_INCLUDE_DIR}/ofits.hpp)
 
 
-set(BOOST_ROOT "C:/Boost/boost_1_78_0/")
 set(Boost_USE_STATIC_LIBS ON)
 
-find_package(Boost 1.78.0 REQUIRED)
+find_package(Boost 1.84.0)
 include_directories(${Boost_INCLUDE_DIRS})
 add_library(lib_fits INTERFACE ${LIB_IFITS_HEADER_FILES})
 
 target_link_libraries(lib_fits ${Boost_LIBRARIES})
 
-
 add_subdirectory(ifits)
 add_subdirectory(ofits)
-#add_subdirectory(test)
+add_subdirectory(test)

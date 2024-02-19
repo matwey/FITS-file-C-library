@@ -9,53 +9,35 @@
 #include "pch.hpp"
 #include "details/search.hpp"
 
+#if !defined(BOOST_ASIO_HAS_FILE)
+#error "BOOST_ASIO_HAS_FILE not defined"
+#endif
+
 class ifits
 {
 public:
     using header_container_t = std::unordered_multimap<std::string, std::string, CaseInsensitiveHash, CaseInsensitiveEqual>;
 
+    header_container_t headers_;
+
     ifits() = default;
 
-    explicit ifits(const boost::asio::io_context &io_context, const std::filesystem::path &filename)
-        : file_(io_context, filename, boost::asio::random_access_file::read_only)
-    {
-        char buffer[81];
-        std::uint64_t next_hdu_offset = 0;
-
-        while (file_.read_some_at(next_hdu_offset, boost::asio::buffer(buffer, 80)) == 80)
-        {
-            buffer[80] = '\0';
-
-            std::string key = std::string(buffer, 8);
-            std::string value = std::string(buffer + 8, 30);
-            headers_.emplace(key, value);
-
-            next_hdu_offset += 80;
-        }
-
-        while (file_.size() < next_hdu_offset)
-        {
-            auto &new_hdu = hdus_.push_back(extract_next_HDU(next_hdu_offset));
-            next_hdu_offset += new_hdu.calculate_next_HDU_offset();
-        }
-    }
-
-    ifits(const ifits &) = delete;
-    ifits(ifits &&) = delete;
-
-    ifits &operator=(const ifits &) = delete;
-    ifits &operator=(ifits &) = delete;
-
-public:
     class hdu
     {
+    private:
+        ifits &parent_ifits_;
+        header_container_t headers_;
+
     public:
         static constexpr auto kSizeHeaderBlock = 2880;
 
-        hdu(const header_container_t &headers)
-            : headers_(headers)
+        hdu(ifits &parent_ifits, const header_container_t &headers)
+            : parent_ifits_(parent_ifits),
+              headers_(headers)
         {
         }
+
+        hdu(ifits &parent_ifits) : parent_ifits_(parent_ifits) {}
 
         std::size_t calculate_next_HDU_offset() const
         {
@@ -129,7 +111,7 @@ public:
         template <class T>
         T value_as(std::string_view key) const
         {
-            auto it = headers_.find(key);
+            auto it = headers_.find(std::string(key));
             if (it == headers_.end())
             {
                 throw std::out_of_range("Not found");
@@ -139,7 +121,7 @@ public:
             T value;
             if (!(iss >> value))
             {
-                throw std::runtime_error("Failed to convert value: " + std::string(e.what()));
+                throw std::runtime_error("Failed to convert value");
             }
 
             return value;
@@ -148,7 +130,7 @@ public:
         template <class T>
         std::optional<T> value_as_optional(std::string_view key) const
         {
-            auto it = headers_.find(key);
+            auto it = headers_.find(std::string(key));
             if (it != headers_.end())
             {
                 // Возвращает std::optional<T>, а не значение типа T, поэтому не преобразуем в T
@@ -163,19 +145,19 @@ public:
         {
             if (get_BITPIX() == 8)
             {
-                return f(image_hdu<std::uint8_t>(this));
+                return f(image_hdu<std::uint8_t>(*this));
             }
             else if (get_BITPIX() == 16)
             {
-                return f(image_hdu<std::int16_t>(this));
+                return f(image_hdu<std::int16_t>(*this));
             }
             else if (get_BITPIX() == 32)
             {
-                return f(image_hdu<std::int32_t>(this));
+                return f(image_hdu<std::int32_t>(*this));
             }
             else if (get_BITPIX() == 64)
             {
-                return f(image_hdu<std::int64_t>(this));
+                return f(image_hdu<std::int64_t>(*this));
             }
             else
             {
@@ -183,15 +165,15 @@ public:
             }
         }
 
-    private:
-        header_container_t headers_;
+    public:
         hdu extract_next_HDU(std::uint64_t offset)
         {
             header_container_t headers;
             char data[kSizeHeaderBlock];
             for (;; offset += kSizeHeaderBlock)
             {
-                std::size_t n = from_file.read_at(offset, boost::asio::buffer(data, kSizeHeaderBlock), error);
+                boost::system::error_code error;
+                std::size_t n = parent_ifits_.file_.read_some_at(offset, boost::asio::buffer(data, kSizeHeaderBlock), error);
                 if (error)
                 {
                     throw std::runtime_error("Error reading file");
@@ -201,14 +183,45 @@ public:
                     throw std::runtime_error("Invalid file format");
                 }
 
-                if (headers.back().type == END)
+                if (headers.find("END") != headers.end())
                 {
                     break;
                 }
             }
-            return hdu{headers};
+            return hdu(parent_ifits_);
         }
     };
+
+    explicit ifits(boost::asio::io_context &io_context, const std::filesystem::path &filename)
+        : file_(io_context, filename, boost::asio::random_access_file::read_only)
+    {
+        char buffer[81];
+        std::uint64_t next_hdu_offset = 0;
+
+        while (file_.read_some_at(next_hdu_offset, boost::asio::buffer(buffer, 80)) == 80)
+        {
+            buffer[80] = '\0';
+
+            std::string key = std::string(buffer, 8);
+            std::string value = std::string(buffer + 8, 30);
+            headers_.emplace(key, value);
+
+            next_hdu_offset += 80;
+        }
+
+        while (file_.size() < next_hdu_offset)
+        {
+            auto new_hdu = hdu(*this).extract_next_HDU(next_hdu_offset);
+            hdus_.push_back(new_hdu);
+            next_hdu_offset += new_hdu.calculate_next_HDU_offset();
+        }
+    }
+
+    ifits(const ifits &) = delete;
+    ifits(ifits &&) = delete;
+
+    ifits &operator=(const ifits &) = delete;
+    ifits &operator=(ifits &) = delete;
 
 public:
     std::list<hdu>::const_iterator cbegin() const
@@ -237,7 +250,6 @@ public:
     public:
         image_hdu(ifits &parent_ifits) : parent_ifits_(parent_ifits) {}
 
-        template <class T>
         auto async_read(T *buffer, std::size_t x_coord,
                         std::size_t y_coord,
                         std::size_t z_coord,
@@ -255,11 +267,12 @@ public:
                                                callback(bytes_transferred);
                                            });
         }
+
+    private:
+        ifits &parent_ifits_;
     };
 
 private:
     boost::asio::random_access_file file_;
     std::list<hdu> hdus_;
-
-    ifits &parent_ifits_;
 };
