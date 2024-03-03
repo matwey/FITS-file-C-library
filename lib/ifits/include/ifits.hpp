@@ -133,8 +133,13 @@ public:
             auto it = headers_.find(std::string(key));
             if (it != headers_.end())
             {
-                // Возвращает std::optional<T>, а не значение типа T, поэтому не преобразуем в T
-                return it->second;
+                std::istringstream iss(it->second);
+                T value;
+                if (!(iss >> value))
+                {
+                    throw std::runtime_error("Failed to convert value");
+                }
+                return value;
             }
             return std::nullopt;
         }
