@@ -14,22 +14,19 @@ set(OFITS_INCLUDE_DIR ${LIB_OFITS_DIR}/include)
 include_directories(${OFITS_INCLUDE_DIR})
 
 set(LIB_FITS_HEADER_FILES ${IFITS_INCLUDE_DIR}/ifits.hpp
-                           ${IFITS_INCLUDE_DIR}/details/search.hpp
-                           ${OFITS_INCLUDE_DIR}/ofits.hpp)
+                          ${IFITS_INCLUDE_DIR}/details/search.hpp
+                          ${OFITS_INCLUDE_DIR}/ofits.hpp)
 
-
-set(Boost_USE_STATIC_LIBS ON)
-
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/googletest-main)
-
-find_package(Boost 1.84.0)
-include_directories(${Boost_INCLUDE_DIRS})
-add_library(lib_fits INTERFACE ${LIB_IFITS_HEADER_FILES})
+add_library(lib_fits INTERFACE ${LIB_IFITS_HEADER_FILES})      
 
 target_compile_definitions(lib_fits INTERFACE PROJECT_ROOT="${PROJECT_SOURCE_DIR}")
 
+set(Boost_USE_STATIC_LIBS ON)
+
+find_package(Boost 1.84.0)
+include_directories(${Boost_INCLUDE_DIRS})
+
 target_link_libraries(lib_fits ${Boost_LIBRARIES})
 
-add_subdirectory(ifits)
-add_subdirectory(ofits)
 add_subdirectory(tests)
+add_subdirectory(googletest)

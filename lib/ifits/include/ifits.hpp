@@ -18,26 +18,35 @@ class ifits
 public:
     using header_container_t = std::unordered_multimap<std::string, std::string, CaseInsensitiveHash, CaseInsensitiveEqual>;
 
-    header_container_t headers_;
-
     ifits() = default;
+
+    ifits(const ifits &) = delete;
+    ifits(ifits &&) = delete;
+
+    ifits &operator=(const ifits &) = delete;
+    ifits &operator=(ifits &) = delete;
 
     class hdu
     {
     private:
-        ifits &parent_ifits_;
-        header_container_t headers_;
-
-    public:
         static constexpr auto kSizeHeaderBlock = 2880;
 
-        hdu(ifits &parent_ifits, const header_container_t &headers)
+    public:
+        hdu(ifits &parent_ifits, header_container_t headers)
             : parent_ifits_(parent_ifits),
               headers_(headers)
         {
         }
 
-        hdu(ifits &parent_ifits) : parent_ifits_(parent_ifits) {}
+        hdu(ifits &parent_ifits)
+            : parent_ifits_(parent_ifits)
+        {
+        }
+
+        const header_container_t &get_headers() const
+        {
+            return headers_;
+        }
 
         std::size_t calculate_next_HDU_offset() const
         {
@@ -49,6 +58,11 @@ public:
         }
 
     private:
+        std::size_t round_offset(std::size_t &offset)
+        {
+            return (offset % kSizeHeaderBlock == 0) ? offset : (offset / kSizeHeaderBlock + 1) * kSizeHeaderBlock;
+        }
+
         std::size_t get_NAXIS_product() const
         {
             auto it = headers_.find("NAXIS");
@@ -108,6 +122,7 @@ public:
             return headers_.end();
         }
 
+    public:
         template <class T>
         T value_as(std::string_view key) const
         {
@@ -148,85 +163,81 @@ public:
         template <typename Functor>
         auto apply(Functor f)
         {
-            if (get_BITPIX() == 8)
+            switch (get_BITPIX()) 
             {
-                return f(image_hdu<std::uint8_t>(*this));
-            }
-            else if (get_BITPIX() == 16)
-            {
-                return f(image_hdu<std::int16_t>(*this));
-            }
-            else if (get_BITPIX() == 32)
-            {
-                return f(image_hdu<std::int32_t>(*this));
-            }
-            else if (get_BITPIX() == 64)
-            {
-                return f(image_hdu<std::int64_t>(*this));
-            }
-            else
-            {
-                throw std::runtime_error("Unsupported BITPIX value");
+                case 8:
+                    return f(image_hdu<std::uint8_t>(*this));
+                case 16:
+                    return f(image_hdu<std::int16_t>(*this));
+                case 32:
+                    return f(image_hdu<std::int32_t>(*this));
+                case 64:
+                    return f(image_hdu<std::int64_t>(*this));
+                default:
+                    throw std::runtime_error("Unsupported BITPIX value");
             }
         }
 
-    public:
-        hdu extract_next_HDU(std::uint64_t offset)
+        std::pair<hdu, std::uint64_t> extract_next_HDU(std::uint64_t offset)
         {
-            header_container_t headers;
-            char data[kSizeHeaderBlock];
-            for (;; offset += kSizeHeaderBlock)
+            char buffer[81];
+            while (true)
             {
-                boost::system::error_code error;
-                std::size_t n = parent_ifits_.file_.read_some_at(offset, boost::asio::buffer(data, kSizeHeaderBlock), error);
-                if (error)
+                boost::asio::read_at(parent_ifits_.file_, offset, boost::asio::buffer(buffer, 80));
+                buffer[80] = '\0';
+
+                std::string key = std::string(buffer, 8);
+                boost::algorithm::trim(key);
+
+                std::string value = std::string(buffer + 8, 30);
+                if (value.find("/") != std::string::npos)
                 {
-                    throw std::runtime_error("Error reading file");
-                }
-                if (n < kSizeHeaderBlock)
-                {
-                    throw std::runtime_error("Invalid file format");
+                    value = std::string(buffer + 8, value.find("/"));
                 }
 
-                if (headers.find("END") != headers.end())
+                boost::algorithm::erase_all(value, " ");
+                boost::algorithm::erase_all(value, "=");
+
+                if (key == "END")
                 {
                     break;
                 }
+
+                headers_.emplace(key, value);
+
+                offset += 80;
             }
-            return hdu(parent_ifits_);
+
+            return std::make_pair(hdu(*this), round_offset(offset));
         }
+
+    private:
+        ifits &parent_ifits_;
+        header_container_t headers_;
     };
 
     explicit ifits(boost::asio::io_context &io_context, const std::filesystem::path &filename)
         : file_(io_context, filename, boost::asio::random_access_file::read_only)
     {
-        char buffer[81];
         std::uint64_t next_hdu_offset = 0;
 
-        while (file_.read_some_at(next_hdu_offset, boost::asio::buffer(buffer, 80)) == 80)
+        while (true)
         {
-            buffer[80] = '\0';
+            auto res = hdu(*this).extract_next_HDU(next_hdu_offset);
 
-            std::string key = std::string(buffer, 8);
-            std::string value = std::string(buffer + 8, 30);
-            headers_.emplace(key, value);
+            auto new_hdu = res.first;
 
-            next_hdu_offset += 80;
-        }
-
-        while (file_.size() < next_hdu_offset)
-        {
-            auto new_hdu = hdu(*this).extract_next_HDU(next_hdu_offset);
             hdus_.push_back(new_hdu);
+
+            next_hdu_offset = res.second;
             next_hdu_offset += new_hdu.calculate_next_HDU_offset();
+
+            if (file_.size() <= next_hdu_offset)
+            {
+                break;
+            }
         }
     }
-
-    ifits(const ifits &) = delete;
-    ifits(ifits &&) = delete;
-
-    ifits &operator=(const ifits &) = delete;
-    ifits &operator=(ifits &) = delete;
 
 public:
     std::list<hdu>::const_iterator cbegin() const
@@ -249,15 +260,21 @@ public:
         return hdus_.end();
     }
 
+    const std::list<hdu> &get_hdus() const
+    {
+        return hdus_;
+    }
+
     template <class T>
     class image_hdu
     {
     public:
-        image_hdu(ifits &parent_ifits) : parent_ifits_(parent_ifits) {}
+        image_hdu(ifits &parent_ifits)
+            : parent_ifits_(parent_ifits)
+        {
+        }
 
-        auto async_read(T *buffer, std::size_t x_coord,
-                        std::size_t y_coord,
-                        std::size_t z_coord,
+        auto async_read(T *buffer, std::size_t x_coord, std::size_t y_coord, std::size_t z_coord, 
                         std::function<void(std::size_t)> callback)
         {
             boost::asio::mutable_buffer buf(buffer, sizeof(T));
