@@ -129,6 +129,23 @@ TEST(ifitsTest, CheckNotExistingHeaderOptional)
     EXPECT_EQ(value, std::nullopt);
 }
 
+TEST(ifitsTest, CheckImageHdu)
+{
+    boost::asio::io_context io_context;
+
+    std::filesystem::path filename = DATA_ROOT "/movie-64.fits";
+
+    ifits movie64_fits(io_context, filename);
+
+    ifits::image_hdu<int> image_hdu(movie64_fits);
+
+    int buffer;
+
+    /*image_hdu.async_read(&buffer, 0, 0, 0, [](std::size_t bytes_transferred) {
+        EXPECT_EQ(bytes_transferred, sizeof(int));
+    });*/
+}
+
 int main(int argc, char **argv)
 {
     testing::InitGoogleTest(&argc, argv);
