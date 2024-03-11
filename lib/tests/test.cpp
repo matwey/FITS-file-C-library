@@ -50,7 +50,7 @@ TEST(ifitsTest, CheckNotExistingHeader)
 
     try
     {
-        std::string value = movie64_fits.get_hdus().front().value_as<std::string>("NON_EXISTING_FILE");
+        std::string value = movie64_fits.get_hdus().front().value_as<std::string>("NON_EXISTING_KEY");
     }
     catch (const std::out_of_range &e)
     {
@@ -63,7 +63,7 @@ TEST(ifitsTest, CheckNotExistingHeader)
 
     try
     {
-        std::string value = gradient_fits.get_hdus().front().value_as<std::string>("NON_EXISTING_FILE");
+        std::string value = gradient_fits.get_hdus().front().value_as<std::string>("NON_EXISTING_KEY");
     }
     catch (const std::out_of_range &e)
     {
@@ -100,7 +100,7 @@ TEST(ifitsTest, CheckValues)
     }
 }
 
-TEST(ifitsTest, CheckValueAs)
+TEST(ifitsTest, CheckValueAsOptional)
 {
     boost::asio::io_context io_context;
 
@@ -112,9 +112,21 @@ TEST(ifitsTest, CheckValueAs)
     {
         for (const auto &[key, value] : hdu.get_headers())
         {
-            EXPECT_EQ(value, hdu.value_as<std::string>(key));
+            EXPECT_EQ(value, hdu.value_as_optional<std::string>(key));
         }
     }
+}
+
+TEST(ifitsTest, CheckNotExistingHeaderOptional)
+{
+    boost::asio::io_context io_context;
+
+    std::filesystem::path filename = DATA_ROOT "/movie-64.fits";
+
+    ifits movie64_fits(io_context, filename);
+
+    std::optional<std::string> value = movie64_fits.get_hdus().front().value_as_optional<std::string>("NON_EXISTING_KEY");
+    EXPECT_EQ(value, std::nullopt);
 }
 
 int main(int argc, char **argv)
