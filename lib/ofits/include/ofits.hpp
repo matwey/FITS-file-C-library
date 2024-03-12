@@ -5,7 +5,7 @@
  */
 
 #include "pch.hpp"
-#include <ifits/details/search.hpp>
+#include "details/search.hpp"
 
 #if !defined(BOOST_ASIO_HAS_FILE)
 #error "BOOST_ASIO_HAS_FILE not defined"
@@ -17,6 +17,25 @@ class ofits
     ofits(boost::asio::io_context &io_context, const std::filesystem::path &filename, std::initilizer_list<...> schema)
         : file_(io_context, filename, std::move(schema), boost::asio::random_access_file::write_only)
     {
+        file_.open(filename, boost::asio::random_access_file::read_write);
+
+        for (const auto &arg : schema)
+        {
+            //int dimension = arg.first;
+            //std::vector<int> axis_sizes = arg.second;
+
+            std::string dimension_header = "NAXIS " + std::to_string(dimension) + "\n";
+            //записать
+
+            for (int i = 0; i < dimension; ++i)
+            {
+                std::string axis_header = "NAXIS" + std::to_string(i + 1) + " " + std::to_string(axis_sizes[i]) + "\n";
+                //записать
+            }
+
+        }
+
+        std::string end_header = "END\n";
     }
 
     class hdu
@@ -28,7 +47,7 @@ class ofits
         }
         template <class T>
         void value_as(string_view key, T value) const {
-
+            // запись хэдеров
         }
 
         /* проитерировать по всем заголовкам */
@@ -57,11 +76,3 @@ class ofits
 private:
     boost::asio::random_access_file file_;
 };
-
-/*
-    ofits<std::uint8_t> single_hdu_file{"file.fits", {{200, 300}}}; размер 200 x 300
-    ofits<std::uint8_t, float> double_hdu_file{"file.fits", {{200, 300}, {100, 50, 50}}};
-
-    std::get<0>(single_hdu_file).value_as("DATE-OBS", "1970-01-01");
-    std::get<0>(single_hdu_file).async_write(...);
-*/

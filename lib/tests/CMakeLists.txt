@@ -1,8 +1,8 @@
 project(tests)
 
-add_executable(tests test.cpp)
+add_executable(tests test_ifits.cpp test_ofits.cpp)
 
-set_property(TARGET tests PROPERTY CXX_STANDARD 17)
+set_property(TARGET tests PROPERTY CXX_STANDARD 20)
 set_property(TARGET tests PROPERTY CXX_STANDARD_REQUIRED ON)
 
 include(GoogleTest)
