@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.5.0)
 project(
     lib_fits 
-    LANGUAGES CXX 
+    LANGUAGES CXX
     VERSION 1.0.0)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON) 
 
 set(LIB_IFITS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ifits)
 set(LIB_OFITS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ofits)   
@@ -17,7 +20,7 @@ set(LIB_FITS_HEADER_FILES ${IFITS_INCLUDE_DIR}/ifits.hpp
                           ${IFITS_INCLUDE_DIR}/details/search.hpp
                           ${OFITS_INCLUDE_DIR}/ofits.hpp)
 
-add_library(lib_fits INTERFACE ${LIB_IFITS_HEADER_FILES})      
+add_library(lib_fits INTERFACE ${LIB_IFITS_HEADER_FILES})
 
 target_compile_definitions(lib_fits INTERFACE PROJECT_ROOT="${PROJECT_SOURCE_DIR}")
 
