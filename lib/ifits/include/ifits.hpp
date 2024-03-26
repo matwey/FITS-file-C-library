@@ -4,8 +4,6 @@
  *
  */
 
-#pragma once
-
 #include "pch.hpp"
 #include "details/search.hpp"
 
@@ -43,7 +41,7 @@ public:
         {
         }
 
-        const header_container_t &get_headers() const
+        const header_container_t &get_headers() const noexcept
         {
             return headers_;
         }
@@ -57,8 +55,18 @@ public:
             return offset;
         }
 
+        int get_NAXIS() const
+        {
+            auto it = headers_.find("NAXIS");
+            if (it == headers_.end())
+            {
+                throw std::out_of_range("NAXIS not found");
+            }
+            return std::stoi(it->second);
+        }
+
     private:
-        std::size_t round_offset(std::size_t &offset)
+        static std::size_t round_offset(const std::size_t &offset)
         {
             return (offset % kSizeHeaderBlock == 0) ? offset : (offset / kSizeHeaderBlock + 1) * kSizeHeaderBlock;
         }
@@ -163,18 +171,22 @@ public:
         template <typename Functor>
         auto apply(Functor f)
         {
-            switch (get_BITPIX()) 
+            switch (get_BITPIX())
             {
-                case 8:
-                    return f(image_hdu<std::uint8_t>(*this));
-                case 16:
-                    return f(image_hdu<std::int16_t>(*this));
-                case 32:
-                    return f(image_hdu<std::int32_t>(*this));
-                case 64:
-                    return f(image_hdu<std::int64_t>(*this));
-                default:
-                    throw std::runtime_error("Unsupported BITPIX value");
+            case 8:
+                return f(image_hdu<std::uint8_t>(*this));
+            case 16:
+                return f(image_hdu<std::int16_t>(*this));
+            case 32:
+                return f(image_hdu<std::int32_t>(*this));
+            case 64:
+                return f(image_hdu<std::int64_t>(*this));
+            case -32:
+                return f(image_hdu<float>(*this));
+            case -64:
+                return f(image_hdu<double>(*this));
+            default:
+                throw std::runtime_error("Unsupported BITPIX value");
             }
         }
 
@@ -260,7 +272,7 @@ public:
         return hdus_.end();
     }
 
-    const std::list<hdu> &get_hdus() const
+    const std::list<hdu> &get_hdus() const noexcept
     {
         return hdus_;
     }
@@ -270,12 +282,12 @@ public:
     {
     public:
         image_hdu(ifits &parent_ifits)
-            : parent_ifits_(parent_ifits)
+            : parent_ifits_(parent_ifits),
+              axis_(parent_ifits.get_hdus().front().get_NAXIS())
         {
         }
 
-        auto async_read(T *buffer, std::size_t x_coord, std::size_t y_coord, std::size_t z_coord, 
-                        std::function<void(std::size_t)> callback)
+        auto async_read(T *buffer, std::function<void(std::size_t)> callback)
         {
             boost::asio::mutable_buffer buf(buffer, sizeof(T));
 
@@ -292,6 +304,7 @@ public:
 
     private:
         ifits &parent_ifits_;
+        std::vector<std::size_t> axis_;
     };
 
 private:
