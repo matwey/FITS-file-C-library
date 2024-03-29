@@ -129,21 +129,27 @@ TEST(test_ifits, check_not_existing_header_optional)
     EXPECT_EQ(value, std::nullopt);
 }
 
-TEST(test_ifits, check_image_hdu)
-{
+TEST(test_ifits, check_image_hdu) {
     boost::asio::io_context io_context;
 
     std::filesystem::path filename = DATA_ROOT "/movie-64.fits";
 
     ifits movie64_fits(io_context, filename);
 
-    ifits::image_hdu<int> image_hdu(movie64_fits);
+    ifits::image_hdu<float> image_hdu(movie64_fits);
 
-    int buffer;
+    float buffer;
+    /* 
+    boost::asio::post(io_context, [&]() {
+        boost::asio::mutable_buffer buf(&buffer, sizeof(float));
+        image_hdu.async_read(buf, [&](std::size_t bytes_transferred) {
 
-    // памагити 
+            float* float_buffer = static_cast<float*>(buf.data());
 
-    /*image_hdu.async_read(&buffer, 0, 0, 0, [](std::size_t bytes_transferred) {
-        EXPECT_EQ(bytes_transferred, sizeof(int));
-    });*/
+            ASSERT_EQ(bytes_transferred, sizeof(float));
+        });
+    });
+    */
+
+    io_context.run();
 }

@@ -291,7 +291,7 @@ public:
         {
             boost::asio::mutable_buffer buf(buffer, sizeof(T));
 
-            return boost::asio::async_read(parent_ifits_.file_, buf, boost::asio::transfer_exactly(sizeof(T)),
+            return boost::asio::async_read_at(parent_ifits_.file_, buf, boost::asio::transfer_exactly(sizeof(T)),
                                            [callback](const boost::system::error_code &error, std::size_t bytes_transferred)
                                            {
                                                if (error)
