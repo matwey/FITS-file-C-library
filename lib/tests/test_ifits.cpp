@@ -147,9 +147,3 @@ TEST(test_ifits, check_image_hdu)
         EXPECT_EQ(bytes_transferred, sizeof(int));
     });*/
 }
-
-int main(int argc, char **argv)
-{
-    testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}
